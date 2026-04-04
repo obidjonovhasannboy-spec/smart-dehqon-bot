@@ -595,9 +595,4 @@ def handle_text(message):
 
 
 # ===================== ISHGA TUSHIRISH =====================
-
-if __name__ == "__main__":
-    print("Webhook o'chirilmoqda...")
-    bot.delete_webhook()
-    print("SmartDehqon bot ishga tushdi... Polling boshlandi.")
-    bot.infinity_polling()
+bot.infinity_polling(skip_pending=True)
