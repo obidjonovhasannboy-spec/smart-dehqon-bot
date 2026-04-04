@@ -595,4 +595,4 @@ def handle_text(message):
 
 
 # ===================== ISHGA TUSHIRISH =====================
-bot.infinity_polling()
+bot.infinity_polling(skip_pending=True)
