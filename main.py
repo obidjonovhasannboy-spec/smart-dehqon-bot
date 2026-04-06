@@ -67,7 +67,61 @@ def check_callback(call):
         bot.send_message(call.message.chat.id, "Xush kelibsiz! Botdan foydalanishingiz mumkin.", reply_markup=asosiy_menyu())
     else:
         bot.answer_callback_query(call.id, "Siz hali kanalga a'zo bo'lmadingiz! ❌", show_alert=True)
-# --- MAJBURIY OBUNA TUGADI --- # ===================== MENYU =====================
+# --- MAJBURIY OBUNA TUGADI --- # ================= AI EKISH TAVSIYASI =================
+
+@bot.message_handler(func=lambda message: message.text == "🌱 Ekish tavsiyasi")
+def ekish_tavsiyalari(message):
+    markup = InlineKeyboardMarkup(row_width=2)
+    btn1 = InlineKeyboardButton("🍅 Pomidor", callback_data="ai_pomidor")
+    btn2 = InlineKeyboardButton("🥒 Bodring", callback_data="ai_bodring")
+    btn3 = InlineKeyboardButton("🌽 Makkajo'xori", callback_data="ai_makkajo_xori")
+    btn4 = InlineKeyboardButton("🥔 Kartoshka", callback_data="ai_kartoshka")
+    btn5 = InlineKeyboardButton("🧅 Piyoz", callback_data="ai_piyoz")
+    markup.add(btn1, btn2, btn3, btn4, btn5)
+    
+    bot.send_message(message.chat.id, "Qaysi ekin haqida AI dan batafsil ma'lumot olmoqchisiz?", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("ai_"))
+def get_ai_info(call):
+    # Foydalanuvchi obuna bo'lganini tekshirish
+    if not check_sub(call.from_user.id):
+        bot.answer_callback_query(call.id, "Avval kanalga a'zo bo'ling!", show_alert=True)
+        return
+
+    ekin = call.data.replace("ai_", "").replace("_", " ")
+    bot.answer_callback_query(call.id, "AI tahlil qilmoqda...")
+    
+    # Kutish xabari
+    process_msg = bot.send_message(call.message.chat.id, f"⌛ **{ekin.capitalize()}** haqida ma'lumot tayyorlanmoqda...")
+
+    try:
+        # AI ga buyruq
+        prompt = f"O'zbekiston iqlimida {ekin} yetishtirish bo'yicha juda batafsil agronomik tavsiyalar ber. Ekish vaqti, sxemasi, o'g'itlash va sug'orish sirlarini yoz."
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o", 
+            messages=[
+                {"role": "system", "content": "Sen professional agronom va dehqonchilik bo'yicha mutaxassisman. Javoblarni o'zbek tilida chiroyli formatda ber."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        answer = response.choices[0].message.content
+        
+        # Orqaga qaytish tugmasi
+        back_markup = InlineKeyboardMarkup()
+        back_markup.add(InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_list"))
+        
+        bot.delete_message(call.message.chat.id, process_msg.message_id)
+        bot.send_message(call.message.chat.id, answer, parse_mode="Markdown", reply_markup=back_markup)
+
+    except Exception as e:
+        bot.edit_message_text(f"❌ Xatolik yuz berdi: {str(e)}", call.message.chat.id, process_msg.message_id)
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_list")
+def back_to_list(call):
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    ekish_tavsiyalari(call.message) # ===================== MENYU =====================
 
 
 def asosiy_menyu():
