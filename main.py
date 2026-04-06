@@ -1,496 +1,349 @@
-mport math
+import math
 import os
-import base64
 import requests
 import telebot
+import google.generativeai as genai
 from telebot.types import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
 )
-from openai import OpenAI
 
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8644043557:AAEAGslHPCh6OQ6H6XmZdgS_nZhIwpyHUU8")
-WEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY")
+# ===================== СОЗЛАМАЛАР =====================
+TOKEN = "8644043557:AAEAGslHPCh6OQ6H6XmZdgS_nZhIwpyHUU8"
+GEMINI_API_KEY = "AIzaSyAUIlYbmhFDXeF0OB510Yz2nb-PvcHoryI"
+WEATHER_API_KEY = "80f124c130311f4422204c3527b140df"
 WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 
-# the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-# do not change this unless explicitly requested by the user
-openai_client = OpenAI(
-    api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
-    base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),
-)
+# Gemini AI созламаси
+genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
 bot = telebot.TeleBot(TOKEN)
-
-# Foydalanuvchi shaharlari (chat_id -> shahar nomi)
-user_cities = {}
-
-# Kasallik aniqlash rejimidagi foydalanuvchilar
 kasallik_mode = set()
 
-
-# --- MAJBURIY OBUNA QISMI ---
+# Мажбурий обуна канали
 CHANNELS = ["@smart_dehqon_channel"]
 CHANNEL_URL = "https://t.me/smart_dehqon_channel"
 
+# ===================== КИТОБЛАР РЎЙХАТИ =====================
+ALL_BOOKS = [
+    ('Suv xo\'jaligini boshqarish', 'https://agrobank.uz/upload/iblock/04b/mmqrqriicrayrpoc82e7s4ok5y88ovmj/1-Suv%20xo%E2%80%98jaligini%20boshqarish.pdf'),
+    ('Suvdan foydalanish tartibi', 'https://agrobank.uz/upload/iblock/da1/4u4u0t5hmprlo5gt2pzqkisek92ipjy6/2-Suvdan%20foydalanish%20tartibi.pdf'),
+    ('Gidromodul rayonlari va sug\'orish rejimlari', 'https://agrobank.uz/upload/iblock/196/hs7ns0jg9cys7spggan5ecvwq5ncbdpe/3-Gidromodul%20rayonlari%20va%20sug%E2%80%98orish%20rejimlari.pdf'),
+    ('Sug\'orishda tuproq xususiyati', 'https://agrobank.uz/upload/iblock/a05/bnhs54tisvwivjg2948by0yf8yv92ihm/4-%20Sug%E2%80%98orishda%20tuproq%20xususiyati.pdf'),
+    ('Suv tejashni qo\'llab-quvvatlash', 'https://agrobank.uz/upload/iblock/9da/djfi9e2rymcphmiaxacjn7pbkcryuh9j/5-%20Suv%20tejashni%20qo%E2%80%98llab-quvvatlash.pdf'),
+    ('Sug\'orish usullari', 'https://agrobank.uz/upload/iblock/7e2/nlyy0l8db02rggaowyevip86z9bm4lkv/6-%20Sug%E2%80%98orish%20usullari.pdf'),
+    ('G\'o\'zani tomchilatib sug\'orish', 'https://agrobank.uz/upload/iblock/afc/lylyep3jxf862zj5uxmhhv7nuroyxdti/7-G%E2%80%98o%E2%80%98zani%20tomchilatib%20sug%E2%80%98orish.pdf'),
+    ('G\'o\'zani yomg\'irlatib sug\'orish', 'https://agrobank.uz/upload/iblock/d0f/73cbco0k8f420kwpwgtgy34zasoi662f/8-%20G%E2%80%98o%E2%80%98zani%20yomg%E2%80%98irlatib%20sug%E2%80%98orish.pdf'),
+    ('G\'o\'zani diskret sug\'orish', 'https://agrobank.uz/upload/iblock/73d/uicydcxt7tp8alxf72rtjywcusqvs369/9-%20G%E2%80%98o%E2%80%98zani%20diskret%20sug%E2%80%98orish.pdf'),
+    ('Bug\'doyni yomg\'irlatib sug\'orish', 'https://agrobank.uz/upload/iblock/e22/zw3x836c15yl95a042md39y9t5rckjsu/10-%20Bug%E2%80%98doyni%20yomg%E2%80%98irlatib%20sug%E2%80%98orish.pdf'),
+    ('Donli ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/3e5/c4bwhnji6q4nzeqr7n6pv0rfulgp5gyn/11-Donli%20ekinlarni%20sug%E2%80%98orish.pdf'),
+    ('Kartoshkani sug\'orish', 'https://agrobank.uz/upload/iblock/3a3/o695zhjt8o0nt9sashwsig8iueii543u/12-Kartoshkani%20sug%E2%80%98orish.pdf'),
+    ('Sholini sug\'orish', 'https://agrobank.uz/upload/iblock/198/8kqx01tql3p7j4ppxe2zuweqielujvds/13-Sholini%20sug%E2%80%98orish.pdf'),
+    ('Piyozni sug\'orish', 'https://agrobank.uz/upload/iblock/937/hfcqikq2laisgd7rc59t9m7k32j3g74y/14-Piyozni%20sug%E2%80%98orish.pdf'),
+    ('Sabzavot ekinlarini sug\'orish', 'https://agrobank.uz/upload/iblock/1d5/39swrjrdfths3i29r5dvrc25kbm6b75u/15-Sabzavot%20ekinlarini%20sug%E2%80%98orish.pdf'),
+    ('Issiqxonada sabzavot ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/a9a/5of87zsrcor4igug9djh72nv33miv11a/16-Issiqxonada%20sabzavot%20ekinlarni%20sug%E2%80%98orish.pdf'),
+    ('Dukkakli don ekinlarini sug\'orish', 'https://agrobank.uz/upload/iblock/96b/eh5sq8x78oelcyhqy43k2l9ln0g770vc/17-Dukkakli%20don%20ekinlarini%20sug%E2%80%98orish.pdf'),
+    ('Poliz ekinlarini sug\'orish', 'https://agrobank.uz/upload/iblock/42a/e1bqjk85z149vid8ldhft0r3o3je7nbg/18-Poliz%20ekinlarini%20sug%E2%80%98orish.pdf'),
+    ('Uzum va mevali ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/c49/ushdd78fnj6m32c8q9p4rc54n0bt3wtk/19-Uzum%20va%20mevali%20ekinlarni%20sug%E2%80%98orish.pdf'),
+    ('Ozuqabop ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/f98/uhw3kbewz564syaiistir3tp2pjm1sd8/20-Ozuqabop%20ekinlarni%20sug%E2%80%98orish.pdf'),
+    ('Lalmi yerlarda yomg\'ir suvidan foydalanish', 'https://agrobank.uz/upload/iblock/900/y14ckllzs10u7xmws5og1kazpez66cb8/21-Lalmi%20yerlarda%20yomg%E2%80%98ir%20suvidan%20foydalanish.pdf'),
+    ('Tuproqda nam saqlovchi vositalar', 'https://agrobank.uz/upload/iblock/5f0/4uin56wynmk8clbwi1rbbmoe421ld59a/22-Tuproqda%20nam%20saqlovchi%20vositalar.pdf'),
+    ('Yerlarni tekislash', 'https://agrobank.uz/upload/iblock/63a/mrsqbxmgjrvjtefrv6f3d203p075h6g3/23-Yerlarni%20tekislash.pdf'),
+    ('Sug\'orishda nasoslardan foydalanish', 'https://agrobank.uz/upload/iblock/31c/qbm669hf6orfcyfdg18nmr3jh3hf3h92/24-Sug%E2%80%98orishda%20nasoslardan%20foydalanish.pdf'),
+    ('Sug\'orishda muqobil energiya manbalari', 'https://agrobank.uz/upload/iblock/f85/ei9udp9sv6l8asu8nhtqsq0hzi7331ph/25-Sug%E2%80%98orishda%20muqobil%20energiya%20manbalari.pdf'),
+    ('Yerlarning meliorativ holatini yaxshilash', 'https://agrobank.uz/upload/iblock/8a7/f8hwwi86n58kfyibwfduufmi696do27u/26-Yerlarning%20meliorativ%20holatini%20yaxshilash.pdf'),
+    ('Sug\'orish texnologiyasini loyihalash va qurish', 'https://agrobank.uz/upload/iblock/bc1/7p75m5cu26d603e0w36xbyd2ubcgqd8a/27-Sug%E2%80%98orish%20texnologiyasini%20loyihalash%20va%20qurish.pdf'),
+    ('Sug\'orishda agrometrologik stansiyalardan foydalanish', 'https://agrobank.uz/upload/iblock/8b5/cfwvany811gl2iocfas35wc1grc3dsdw/28-Sug%E2%80%98orishda%20agrometrologik%20stansiyalardan%20foydalanish.pdf'),
+    ('Turkiyada sug\'orish tajribasi', 'https://agrobank.uz/upload/iblock/a01/u3ac0ozah06yaimysh7ht8mar4vdz9xt/29-Turkiyada%20sug%E2%80%98orish%20tajribasi.pdf'),
+    ('Xitoyda sug\'orish tajribasi', 'https://agrobank.uz/upload/iblock/573/vxdcqx8q4csepyje7uip0r5x4j5yednc/30-Xitoyda%20sug%E2%80%98orish%20tajribasi.pdf'),
+    ('Kitob 31', 'https://agrobank.uz/upload/iblock/037/4bkwu0ywfh40a4bj0ocbwemu089yquvz/6088ea419eb33.pdf'),
+    ('Kitob 32', 'https://agrobank.uz/upload/iblock/540/o8q28v577ruiyuotu588010fdw0ne60e/6088e74c003ce.pdf'),
+    ('Kitob 33', 'https://agrobank.uz/upload/iblock/f34/bz6t06vw4ii3lzxhpee1ovo0z73vbulq/6088e795a17b9.pdf'),
+    ('Kitob 34', 'https://agrobank.uz/upload/iblock/460/wii1lz7ckd3i19axgv9l4ocjmcxps2ws/6088e802be5b3.pdf'),
+    ('Kitob 35', 'https://agrobank.uz/upload/iblock/7a5/h06ynpkmi4irrexkr2t3rh2a0im45deq/6088e8459b888.pdf'),
+    ('Kitob 36', 'https://agrobank.uz/upload/iblock/966/ani02ebmt93xaccjgruceqvij5gmbaf9/6088e865bbbc5.pdf'),
+    ('Kitob 37', 'https://agrobank.uz/upload/iblock/768/3h8largd7xohk58o8cy4w6et19ezmhz2/6088e8afea83d.pdf'),
+    ('Kitob 38', 'https://agrobank.uz/upload/iblock/e55/bqwujm4ldmtleljco2vgh27rptuifsib/6088e96002d01.pdf'),
+    ('Kitob 39', 'https://agrobank.uz/upload/iblock/80b/tksjmj7gtomfuv6xbqvq9hzchumlr7y9/6088e999ebf3f.pdf'),
+    ('Kitob 40', 'https://agrobank.uz/upload/iblock/245/pm42j6g2q6bsptqup27hxb90z8jjja91/6088e9ddb9829.pdf'),
+    ('Kitob 41', 'https://agrobank.uz/upload/iblock/979/g8aeyxi21h0taobm4caphhwoehp7aqyt/6088ea18e0dad.pdf'),
+    ('Kitob 42', 'https://agrobank.uz/upload/iblock/a26/3jts1hgandv9djerz7p5vsaepvv4020x/6088ec94ce924.pdf'),
+    ('Kitob 43', 'https://agrobank.uz/upload/iblock/b55/1rtqz70nfdqpn3w66f5x03uj5289l0d0/6088ea6b4425b.pdf'),
+    ('Kitob 44', 'https://agrobank.uz/upload/iblock/23d/2vnbr6e07eeaxnqqoji48fui3nglbvdb/6088ea990d96a.pdf'),
+    ('Kitob 45', 'https://agrobank.uz/upload/iblock/407/dxi7ak3urospzob60dk14iuk2yuyklek/6088eab7eebdd.pdf'),
+    ('Kitob 46', 'https://agrobank.uz/upload/iblock/03d/9jdnz00g9con14cjjama1l46ddg7aiui/6088eadebe04f.pdf'),
+    ('Kitob 47', 'https://agrobank.uz/upload/iblock/c8b/xtnu6pfw1ubwnm4khxszoukt8tnkjn1u/6088eb1c68b89.pdf'),
+    ('Kitob 48', 'https://agrobank.uz/upload/iblock/c3a/13bg1pc036bty2zsdvj0xpvdnhma0935/6088eb41780c5.pdf'),
+    ('Kitob 49', 'https://agrobank.uz/upload/iblock/003/v96bv8bmpc7fvc7ebpmczog93n1jz0fe/6088eb88f3a2b.pdf'),
+    ('Kitob 50', 'https://agrobank.uz/upload/iblock/662/kwx9r2g5ilcktnopu9hpr1r4sv29qu7m/6088ebe9e32e2.pdf'),
+    ('Kitob 51', 'https://agrobank.uz/upload/iblock/469/0uaf1djcbojqvw834pfk80flizhf0tf7/6088ed7431e1f.pdf'),
+    ('Kitob 52', 'https://agrobank.uz/upload/iblock/599/4vg8l779dgrrv2p7ondr7dupntcudhwi/6088eceb718b1.pdf'),
+    ('Kitob 53', 'https://agrobank.uz/upload/iblock/1e9/bpzld3xn05ytdc89zf7bldy2djxrlxt9/6088f45a7ccf8.pdf'),
+    ('Kitob 54', 'https://agrobank.uz/upload/iblock/0b3/3zokwzwou0gs5fr59ivtgh6e3fx7gp5y/6088f3fd08b53.pdf'),
+    ('Kitob 55', 'https://agrobank.uz/upload/iblock/4a8/3qgj9p96iiup8q96jm2pfd6i2hezmdet/6088f3c71e224.pdf'),
+    ('Kitob 56', 'https://agrobank.uz/upload/iblock/bdc/3xgc4n5jznn3qax6a8f2lfmjlecktv9e/6088f35be5a7e.pdf'),
+    ('Kitob 57', 'https://agrobank.uz/upload/iblock/23b/syjwbbyp194yao1eodajity3rd7e9jow/6088f31227493.pdf'),
+    ('Kitob 58', 'https://agrobank.uz/upload/iblock/2e8/tnn4b83zxsl2xdyxzw09uc0q9pafprqm/6088f2cb93bd4.pdf'),
+    ('Kitob 59', 'https://agrobank.uz/upload/iblock/7cb/dqov3twa4u0ii4xey7mzy3mpu5btx62y/6088f251556d5.pdf'),
+    ('Kitob 60', 'https://agrobank.uz/upload/iblock/7d5/j5p7d796r7lvq9jyg93tmzov4h9hs0su/6088f222711f2.pdf'),
+    ('Kitob 61', 'https://agrobank.uz/upload/iblock/f9d/7likjymogp29ab5w5tt27ahjminfxs30/6088f1eac557b.pdf'),
+    ('Kitob 62', 'https://agrobank.uz/upload/iblock/835/pqte9dfrvnmxakd8n65fxye39ajq182y/6088f1b9c9365.pdf'),
+    ('Kitob 63', 'https://agrobank.uz/upload/iblock/7e6/ym45kexdyx2zc868ff8l1lbt171jidjr/6088f187d4015.pdf'),
+    ('Kitob 64', 'https://agrobank.uz/upload/iblock/1d7/u7txj37pxackiorkzt4ap50fgu9yofuk/6088f136cac33.pdf'),
+    ('Kitob 65', 'https://agrobank.uz/upload/iblock/b98/4og7mk9gscm4qw5lql8ee7rn92297h67/6088f0c2a045a.pdf'),
+    ('Kitob 66', 'https://agrobank.uz/upload/iblock/d40/nd3kt6t4h89mk5y1t2h9k7nvffod0w2v/6088f04883762.pdf'),
+    ('Kitob 67', 'https://agrobank.uz/upload/iblock/ea5/i44y8wxkivmpa7bamq9nbz2h00rtj3yr/6088ef95ad34d.pdf'),
+    ('Kitob 68', 'https://agrobank.uz/upload/iblock/157/f5iaa786bc2lfxdcjw7k9xgu23orf9dh/6088f28495a27.pdf'),
+    ('Kitob 69', 'https://agrobank.uz/upload/iblock/0ba/zxr1ltgo977uudfz9is1wzb4xask5cnr/6088f20a0a578.pdf'),
+    ('Kitob 70', 'https://agrobank.uz/upload/iblock/152/6xfq433s5hsbo17vomrvsl5tlq46xf9u/6088f1b344f32.pdf'),
+    ('Kitob 71', 'https://agrobank.uz/upload/iblock/a5e/i496d49n0384ov1z9mq4k7kva6t555ad/6088f170a7a0a.pdf'),
+    ('Kitob 72', 'https://agrobank.uz/upload/iblock/c2d/g59c1i5mw9bv9l83z8gxk5nzfxin6xtl/6088f136e45ad.pdf'),
+    ('Kitob 73', 'https://agrobank.uz/upload/iblock/aaa/s8dkcrfuo40t35dvnr45b3b1uqkbhj7n/6088f10e2cff9.pdf'),
+    ('Kitob 74', 'https://agrobank.uz/upload/iblock/f5e/iuggb3f6k1cvkj08d46ko3d7y6u4hpkr/6088f0e5c76cc.pdf'),
+    ('Kitob 75', 'https://agrobank.uz/upload/iblock/9e0/uslz6c9qmvv0tffkj9wvkmtl7wnzv5m2/6088f069d3b68.pdf'),
+    ('Kitob 76', 'https://agrobank.uz/upload/iblock/24d/cvuao6tqw75eofu7e3n1wwbkf5hkjvum/6088efdd0e56e.pdf'),
+    ('Kitob 77', 'https://agrobank.uz/upload/iblock/d13/bsf7iiylx3h18h7pf6ekdtdlkb9kl9f2/6088ef9f2d5e2.pdf'),
+    ('Kitob 78', 'https://agrobank.uz/upload/iblock/6d4/nctctjgxqwhf4cdz66hmkpmw3hii5nlf/6088ef5b18bc8.pdf'),
+    ('Kitob 79', 'https://agrobank.uz/upload/iblock/b79/l7nh4kj8hre9dqxoo7cmih6xowh0e62i/6088ef1f62f01.pdf'),
+    ('Kitob 80', 'https://agrobank.uz/upload/iblock/543/sbsz3m7p1oomimhvqwnbgbwxixhjcw4e/6088eed8e3ef6.pdf'),
+    ('Kitob 81', 'https://agrobank.uz/upload/iblock/cd7/l21gihk0z9pmydlqmk07csdkn11gajrp/6088eea29bb67.pdf'),
+    ('Kitob 82', 'https://agrobank.uz/upload/iblock/d99/kk4thwz7yjhagd5lm31rn8hx3j09dmyw/6088ee6c50e09.pdf'),
+    ('Kitob 83', 'https://agrobank.uz/upload/iblock/54f/p4kpafv5v4i4j8w9sxhtyiiy0wqnv06e/6088ee1d4c6f6.pdf'),
+    ('Kitob 84', 'https://agrobank.uz/upload/iblock/bd3/0xj7drxk0pz35cbh0r1fq9rog0w2w5iy/6088edd9b13e0.pdf'),
+    ('Kitob 85', 'https://agrobank.uz/upload/iblock/69a/22s43vq6yrjw8chxs4qbchke7ajnpzd3/6088ed9a2b8f3.pdf'),
+    ('Kitob 86', 'https://agrobank.uz/upload/iblock/3fb/vgmv7qhrjxwrlvf27smjjq46ufwnidrs/6088ec5f22dcc.pdf'),
+    ('Kitob 87', 'https://agrobank.uz/upload/iblock/e16/bpam6bkrn4yxsrxn3w7l8dhm9adx5lvt/6088ebf6e2d91.pdf'),
+    ('Kitob 88', 'https://agrobank.uz/upload/iblock/b0b/5c1rhvs3wxqazqjq5bxbkegk3qntwz89/6088f465a74b0.pdf'),
+    ('Kitob 89', 'https://agrobank.uz/upload/iblock/f38/g60eza0fcpjkk7d7xk4kmpyj1mwww5lq/6088f440ced8e.pdf'),
+    ('Kitob 90', 'https://agrobank.uz/upload/iblock/b6d/epkf8xc8mk7m9snhxxppbblywbkd8zzb/6088f41ab2cc8.pdf'),
+    ('Kitob 91', 'https://agrobank.uz/upload/iblock/0d6/iyqjkf0z72g0rqlrqkagalx7ejj7r35h/6088f3d8499f6.pdf'),
+    ('Kitob 92', 'https://agrobank.uz/upload/iblock/8b6/01v8zqrqajm7w7f0x23thzytbv5ixj6j/6088f37e4a0f4.pdf'),
+    ('Kitob 93', 'https://agrobank.uz/upload/iblock/a7a/4c9phvmqe6jz19tvz7j6dfm1r7rfu1c4/6088fad2697a1.pdf'),
+    ('Kitob 94', 'https://agrobank.uz/upload/iblock/2c4/5scklfz2xhbinbvg7x6zbbgv6t8wq6g1/6088fa97f3de4.pdf'),
+    ('Kitob 95', 'https://agrobank.uz/upload/iblock/91a/ksvbih4bafp65lhfqf0rxdm35czmq6iy/6088fa5ec7e1d.pdf'),
+    ('Kitob 96', 'https://agrobank.uz/upload/iblock/74f/5t7pjlgvakb9lp4djsixikevtq37zfla/6088fa286e1a2.pdf'),
+    ('Kitob 97', 'https://agrobank.uz/upload/iblock/04b/v5jyf1z2ygih3w4poh3hwf3b6f34bxts/6088f9f232770.pdf'),
+    ('Kitob 98', 'https://agrobank.uz/upload/iblock/8b1/7z8e1cq0jrb7f3d8l85r0nv8vmnuze9i/6088f9c31c22f.pdf'),
+    ('Kitob 99', 'https://agrobank.uz/upload/iblock/36d/vbumx71vfv0jc71y3oeqs4wz5bq5b7vz/6088f994a3df8.pdf'),
+    ('Kitob 100', 'https://agrobank.uz/upload/iblock/35f/pyvaqpiyrcgkr8glzflnr5cbq2rcemrz/6088f95a8ad89.pdf'),
+    ('Kitob 101', 'https://agrobank.uz/upload/iblock/2f8/t3aaihv5r7a0vgqevz2mbf2e6oc3h36b/6088f926898a9.pdf'),
+    ('Kitob 102', 'https://agrobank.uz/upload/iblock/22b/qp1vlw9jbgolsjmvptgsnkxlf9z2evhe/6088f8f0ac6bc.pdf'),
+    ('Kitob 103', 'https://agrobank.uz/upload/iblock/8ec/z5g28i6ij1m0iawrbhiuobi72vwz7k7e/6088f8be5d8fc.pdf'),
+    ('Kitob 104', 'https://agrobank.uz/upload/iblock/b8f/hq0r1xue8xi0btx5k0v5jg2x68hktq0n/6088f88637f71.pdf'),
+    ('Kitob 105', 'https://agrobank.uz/upload/iblock/b12/m8grfrv5wdmimx2fldwjpgfacjcswbp9/6088f83f5fc72.pdf'),
+    ('Kitob 106', 'https://agrobank.uz/upload/iblock/e84/p3uo7qlg57p1bqd0i8o0tq2y2x4r52cq/6088f80da2f5c.pdf'),
+    ('Kitob 107', 'https://agrobank.uz/upload/iblock/d87/ctcre3f1fflbwq5jfamdbvmgdddaxvif/6088f7d69c7a3.pdf'),
+    ('Kitob 108', 'https://agrobank.uz/upload/iblock/aad/p7e3fzs3v86s9fjhkxp10j10wgq3pjme/6088f79dc07b5.pdf'),
+    ('Kitob 109', 'https://agrobank.uz/upload/iblock/88a/9l4cclmkcz0bq44ber27wjxs5b3yh0q3/6088f763a15e9.pdf'),
+    ('Kitob 110', 'https://agrobank.uz/upload/iblock/f91/xbcauzr2kwn0yipqg3l3k44m7pbp5c9p/6088f72ead20c.pdf'),
+    ('Kitob 111', 'https://agrobank.uz/upload/iblock/e05/wjq8bkkd1w42mzmxuswyvuqrsp0e9irn/6088f6f3bb4c6.pdf'),
+    ('Kitob 112', 'https://agrobank.uz/upload/iblock/e97/6f74ywrspxoq5dywt7oo9l8p2cvyj70b/6088f6b7d8a05.pdf'),
+    ('Kitob 113', 'https://agrobank.uz/upload/iblock/abb/4r5wz6uu5mvlz2fhgp3t98oj2l3dkfrr/6088f67e4c7d3.pdf'),
+    ('Kitob 114', 'https://agrobank.uz/upload/iblock/af4/0mxx49l9t05qhxkq4e0t15rg80a7dnj6/6088f645cff39.pdf'),
+    ('Kitob 115', 'https://agrobank.uz/upload/iblock/1cd/jq1hhgb7h0b93jbsz5ghtm5gk5k1fjhe/6088f60c1daf8.pdf'),
+    ('Kitob 116', 'https://agrobank.uz/upload/iblock/3fa/bldrqspddghg02g2mvwwm84nvvqv3yd9/6088f5d527b47.pdf'),
+    ('Kitob 117', 'https://agrobank.uz/upload/iblock/e42/vr6v8ykbvvjbskhzwynvnafvbfv3etlx/6088f59dc49ef.pdf'),
+    ('Kitob 118', 'https://agrobank.uz/upload/iblock/7d9/bcbm1xxiqme8bxdbclca5x4i7i5sclpd/6088f56627b6e.pdf'),
+    ('Kitob 119', 'https://agrobank.uz/upload/iblock/f6a/2wvk0xpbw0p1ry1h7c3z3a8y5vw8k7zn/6088f52c3a2ef.pdf'),
+    ('Kitob 120', 'https://agrobank.uz/upload/iblock/6dd/g4w72f2e4yiprnnuiyxpexs1dymqm8q4/6088f4f4d2b8b.pdf'),
+    ('Kitob 121', 'https://agrobank.uz/upload/iblock/26a/9r3mrkv3sxlb5c56f94rqmb9oa0f7i19/6088f4be2a20e.pdf'),
+    ('Kitob 122', 'https://agrobank.uz/upload/iblock/ab4/3b84b3r8ysjlv3h4dg0ky1mlqyg6hm8z/6088f48add0ba.pdf'),
+    ('Kitob 123', 'https://agrobank.uz/upload/iblock/2b4/jq9cddbhj0z9w500k4jv7i1xggo7evc2/6088fd9eaf716.pdf'),
+    ('Kitob 124', 'https://agrobank.uz/upload/iblock/d9e/1a32o2xauyqvu2gyt88oczvhh0y5pvq7/6088fd522e552.pdf'),
+    ('Kitob 125', 'https://agrobank.uz/upload/iblock/1e2/go7xe7ls81ekm145kv2r11kylcg1x7ih/6088fd2750e3c.pdf'),
+    ('Kitob 126', 'https://agrobank.uz/upload/iblock/a06/rtou1ae8w0yir7j6ta4dvrh1dx70fkmi/6088fcff52942.pdf'),
+    ('Kitob 127', 'https://agrobank.uz/upload/iblock/5d8/br6l6z6n53zxbp1ov1nbrh5mjykrpjqw/6088fcb98527f.pdf'),
+    ('Kitob 128', 'https://agrobank.uz/upload/iblock/66a/s9plf258w1zkug4tpusy6x9yqcs65i1f/6088fc6ec2b1d.pdf'),
+    ('Kitob 129', 'https://agrobank.uz/upload/iblock/137/gwp0jyrwq0dgd18chjflkffu2byl89et/6273829c11347.pdf'),
+    ('Kitob 130', 'https://agrobank.uz/upload/iblock/571/thpcguf4bw27vxm3oezdbhpchnc1pgss/6273837dac84f.pdf'),
+    ('Kitob 131', 'https://agrobank.uz/upload/iblock/d3c/2iz9jtn3wfynojzfnp5rfgcof20f6453/6273a2c4e8152.pdf'),
+    ('Kitob 132', 'https://agrobank.uz/upload/iblock/24b/ofbaxbcuj57e1qhi50lkktujpw1hyw34/6273a302eb07b.pdf'),
+    ('Kitob 133', 'https://agrobank.uz/upload/iblock/6be/94u3egnxv7lp6u3gx85gpjn5aks6vj9w/6273a32d9d7a9.pdf'),
+    ('Kitob 134', 'https://agrobank.uz/upload/iblock/2a9/hjpqpx051eqauuuhcnjgq0ju3df5ez37/6273a3b331bb4.pdf'),
+    ('Kitob 135', 'https://agrobank.uz/upload/iblock/e3a/lwq7djjfmfw5byjexju2ua8ypyi2u3dw/6273a3f9ce096.pdf'),
+    ('Kitob 136', 'https://agrobank.uz/upload/iblock/e36/iha67ec2ptz9px3ut04m352ux4u7rrs8/6273a4718083d.pdf'),
+    ('Kitob 137', 'https://agrobank.uz/upload/iblock/569/rwa8r5e2ky14539thijkl0rkajv3wvoo/6273a4bd8fd38.pdf'),
+    ('Kitob 138', 'https://agrobank.uz/upload/iblock/467/hcxlenhuexs6jt5icq7tz8p97c43zxxb/6273a524b1909.pdf'),
+    ('Kitob 139', 'https://agrobank.uz/upload/iblock/d0a/0q6s3n2r0khsbt2rlrdwwux1rizlgqjt/6273a6ad7aa77.pdf'),
+    ('Kitob 140', 'https://agrobank.uz/upload/iblock/0b6/0wv8fe2vy66bjd9532qzhb225ff6fojs/6273a789e54d2.pdf'),
+    ('Kitob 141', 'https://agrobank.uz/upload/iblock/480/5zd2l90y7cok68g0nw15h0z1fkp0xzcj/6273a7b566d92.pdf'),
+    ('Kitob 142', 'https://agrobank.uz/upload/iblock/8d4/1zmaveusab67iidw1e36djauen96xarw/6273a7fdf375b.pdf'),
+    ('Kitob 143', 'https://agrobank.uz/upload/iblock/456/belqaoetan1u3b0k7hn9hdwps5tt8jlo/6273bc2165f96.pdf'),
+    ('Kitob 144', 'https://agrobank.uz/upload/iblock/e49/twqyuiiw0meqjx6zu699tx79q2i9lofr/6273ba4ec7536.pdf'),
+    ('Kitob 145', 'https://agrobank.uz/upload/iblock/b7e/0mzb5pssjpw11brlmaih65st0xul5j7u/6273bb23d5f9d.pdf'),
+    ('Kitob 146', 'https://agrobank.uz/upload/iblock/54b/k4s7zoc1poo88byg3jut77jzbca655iv/6273bc677ddb8.pdf'),
+    ('Kitob 147', 'https://agrobank.uz/upload/iblock/6a9/0n00glm5tvc8qfrtwd88gvz12mdm1hbk/6273bd2b0f644.pdf'),
+    ('Kitob 148', 'https://agrobank.uz/upload/iblock/124/mzp3ng3j5v3d93jf30838t2r7g2k6k4l/6273be14571ac.pdf'),
+    ('Kitob 149', 'https://agrobank.uz/upload/iblock/9e9/c8iux55yw31e8li03n422bv9guekeujd/6273be8882810.pdf'),
+    ('Kitob 150', 'https://agrobank.uz/upload/iblock/bf7/e1wk0qtue6gr6a2w19zz3t622pw2qwsh/6273bed518d7b.pdf'),
+    ('Kitob 151', 'https://agrobank.uz/upload/iblock/0d8/84gxgufcplind8rnbuikmttoldqwr3ca/6273bef681f3f%20(1).pdf'),
+    ('Kitob 152', 'https://agrobank.uz/upload/iblock/7ec/n71xdvam4agweg3uvl98llzk4okx3437/6273bff0d1044.pdf'),
+    ('Kitob 153', 'https://agrobank.uz/upload/iblock/8c7/u71ueitklkyhcoawseku8fgip1ldm8a5/6273c022e7f83.pdf'),
+    ('Kitob 154', 'https://agrobank.uz/upload/iblock/ea7/sr1gq2yj383xo5j72cehf6td08bowivs/6273c0558b8d0.pdf'),
+    ('Kitob 155', 'https://agrobank.uz/upload/iblock/dbd/cgahs7cxdpjdt629srq6nvssw14yxu0a/6273c07bd722f.pdf'),
+    ('Kitob 156', 'https://agrobank.uz/upload/iblock/d0d/eh80kkabpz56z8bszaudfbnuzyb48a1m/6273c09f73420.pdf'),
+    ('Kitob 157', 'https://agrobank.uz/upload/iblock/86b/9apzl1xck61zp7eu13cv7n2e6mwnpf2f/6273c0fd63d9b.pdf'),
+    ('Kitob 158', 'https://agrobank.uz/upload/iblock/872/1w2qkqoxstukadh24n813ryp3fe16m3s/6273c165c2b6c.pdf'),
+    ('Kitob 159', 'https://agrobank.uz/upload/iblock/d42/cmyst2qwooigq53r36maqfi9v931rj5x/6273c3c06fcca.pdf'),
+    ('Kitob 160', 'https://agrobank.uz/upload/iblock/cc5/mn95j44yz53bsowo3mmausdgwypmu19u/6273c3e9647c0.pdf'),
+    ('Kitob 161', 'https://agrobank.uz/upload/iblock/4e5/z5299q7w15321zxr9t2irdq1bj5jemrt/6273c432a66c8.pdf'),
+    ('Kitob 162', 'https://agrobank.uz/upload/iblock/7ce/97gu41b8g4v2dwchlf69t5lrp7up5lop/6273c45e3a050.pdf'),
+    ('Kitob 163', 'https://agrobank.uz/upload/iblock/04f/2pqcg25bc3f34cikw982c732lhc8q5d2/6273c49f44942.pdf'),
+]
+
+KITOB_PER_PAGE = 8  # Битта саҳифада нечта китоб чиқиши
+
+# ===================== ФУНКЦИЯЛАР =====================
+
 def check_sub(user_id):
-    for channel in CHANNELS:
-        try:
-            status = bot.get_chat_member(chat_id=channel, user_id=user_id).status
-            if status in ['member', 'administrator', 'creator']:
-                return True
-        except Exception:
-            return False
-    return False
+    for channel in CHANNELS:
+        try:
+            status = bot.get_chat_member(chat_id=channel, user_id=user_id).status
+            if status in ['member', 'administrator', 'creator']:
+                return True
+        except Exception:
+            return False
+    return False
+
+def asosiy_menyu():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(KeyboardButton("🌤 Ob-havo"), KeyboardButton("🌱 Ekish tavsiyasi"))
+    markup.add(KeyboardButton("🦠 Kasallik aniqlash"), KeyboardButton("📊 Bozor narxlari"))
+    markup.add(KeyboardButton("📚 Kitoblar menyusi"), KeyboardButton("ℹ️ Yordam"))
+    return markup
+
+def get_books_keyboard(page=1):
+    """Китобларни саҳифалаб кўрсатиш учун тугмалар генератори"""
+    markup = InlineKeyboardMarkup(row_width=1)
+    
+    start_index = (page - 1) * KITOB_PER_PAGE
+    end_index = start_index + KITOB_PER_PAGE
+    current_books = ALL_BOOKS[start_index:end_index]
+    
+    for title, url in current_books:
+        markup.add(InlineKeyboardButton(text=title, url=url))
+    
+    # Навигация (Олдинга / Орқага)
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(InlineKeyboardButton("⬅️ Orqaga", callback_data=f"bookpage_{page-1}"))
+    
+    total_pages = math.ceil(len(ALL_BOOKS) / KITOB_PER_PAGE)
+    if page < total_pages:
+        nav_buttons.append(InlineKeyboardButton("Oldinga ➡️", callback_data=f"bookpage_{page+1}"))
+    
+    if nav_buttons:
+        markup.row(*nav_buttons)
+    
+    markup.add(InlineKeyboardButton(f"📄 Sahifa: {page}/{total_pages}", callback_data="none"))
+    return markup
+
+# ===================== ХЕНДЛЕРЛАР =====================
 
 @bot.message_handler(commands=['start'])
-def start_check(message):
-    user_id = message.chat.id
-    if check_sub(user_id):
-        bot.send_message(user_id, f"Assalomu alaykum, {message.from_user.full_name}!", reply_markup=asosiy_menyu())
-    else:
-        markup = InlineKeyboardMarkup()
-        btn = InlineKeyboardButton("Kanalga a'zo bo'lish 📢", url=CHANNEL_URL)
-        check_btn = InlineKeyboardButton("A'zo bo'ldim ✅", callback_data="check_sub")
-        markup.add(btn)
-        markup.add(check_btn)
-        bot.send_message(user_id, "Botdan foydalanish uchun kanalimizga a'zo bo'ling:", reply_markup=markup)
+def start_cmd(message):
+    if check_sub(message.chat.id):
+        bot.send_message(message.chat.id, f"Assalomu alaykum, {message.from_user.full_name}!", reply_markup=asosiy_menyu())
+    else:
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("Kanalga a'zo bo'lish 📢", url=CHANNEL_URL))
+        markup.add(InlineKeyboardButton("A'zo bo'ldim ✅", callback_data="check_sub"))
+        bot.send_message(message.chat.id, "Botdan foydalanish uchun kanalimizga a'zo bo'ling:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def check_callback(call):
-    user_id = call.from_user.id
-    if check_sub(user_id):
-        bot.answer_callback_query(call.id, "Rahmat! A'zolik tasdiqlandi.")
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        bot.send_message(call.message.chat.id, "Xush kelibsiz! Botdan foydalanishingiz mumkin.", reply_markup=asosiy_menyu())
-    else:
-        bot.answer_callback_query(call.id, "Siz hali kanalga a'zo bo'lmadingiz! ❌", show_alert=True)
-# --- MAJBURIY OBUNA TUGADI --- # ================= AI EKISH TAVSIYASI =================
+    if check_sub(call.from_user.id):
+        bot.answer_callback_query(call.id, "Tasdiqlandi!")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.send_message(call.message.chat.id, "Xush kelibsiz!", reply_markup=asosiy_menyu())
+    else:
+        bot.answer_callback_query(call.id, "Hali a'zo bo'lmadingiz!", show_alert=True)
 
+# --- 📚 КИТОБЛАР МЕНЮСИ ---
+@bot.message_handler(func=lambda message: message.text == "📚 Kitoblar menyusi")
+def show_books(message):
+    bot.send_message(
+        message.chat.id, 
+        "📚 **Qishloq xo'jaligiga oid foydali kitoblar:**\n\nKerakli kitobni tanlang, PDF shaklida ochiladi.",
+        reply_markup=get_books_keyboard(1),
+        parse_mode="Markdown"
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("bookpage_"))
+def book_pagination(call):
+    page = int(call.data.split("_")[1])
+    try:
+        bot.edit_message_reply_markup(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=get_books_keyboard(page)
+        )
+    except:
+        pass
+
+# --- 🌱 AI ЭКИШ ТАВСИЯСИ ---
 @bot.message_handler(func=lambda message: message.text == "🌱 Ekish tavsiyasi")
 def ekish_tavsiyalari(message):
-    markup = InlineKeyboardMarkup(row_width=2)
-    btn1 = InlineKeyboardButton("🍅 Pomidor", callback_data="ai_pomidor")
-    btn2 = InlineKeyboardButton("🥒 Bodring", callback_data="ai_bodring")
-    btn3 = InlineKeyboardButton("🌽 Makkajo'xori", callback_data="ai_makkajo_xori")
-    btn4 = InlineKeyboardButton("🥔 Kartoshka", callback_data="ai_kartoshka")
-    btn5 = InlineKeyboardButton("🧅 Piyoz", callback_data="ai_piyoz")
-    markup.add(btn1, btn2, btn3, btn4, btn5)
-    
-    bot.send_message(message.chat.id, "Qaysi ekin haqida AI dan batafsil ma'lumot olmoqchisiz?", reply_markup=markup)
+    markup = InlineKeyboardMarkup(row_width=2)
+    ekinlar = [("🍅 Pomidor", "ai_pomidor"), ("🥒 Bodring", "ai_bodring"), ("🥔 Kartoshka", "ai_kartoshka"), ("🧅 Piyoz", "ai_piyoz")]
+    for text, data in ekinlar:
+        markup.add(InlineKeyboardButton(text, callback_data=data))
+    bot.send_message(message.chat.id, "Qaysi ekin haqida AI dan tavsiya olmoqchisiz?", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ai_"))
 def get_ai_info(call):
-    # Foydalanuvchi obuna bo'lganini tekshirish
-    if not check_sub(call.from_user.id):
-        bot.answer_callback_query(call.id, "Avval kanalga a'zo bo'ling!", show_alert=True)
-        return
+    ekin = call.data.replace("ai_", "")
+    wait_msg = bot.send_message(call.message.chat.id, "⌛ Gemini tahlil qilmoqda...")
+    try:
+        response = gemini_model.generate_content(f"O'zbekistonda {ekin} yetishtirish sirlari haqida o'zbek tilida batafsil ma'lumot ber.")
+        bot.delete_message(call.message.chat.id, wait_msg.message_id)
+        bot.send_message(call.message.chat.id, response.text, parse_mode="Markdown")
+    except:
+        bot.edit_message_text("❌ AI bilan bog'lanishda xatolik.", call.message.chat.id, wait_msg.message_id)
 
-    ekin = call.data.replace("ai_", "").replace("_", " ")
-    bot.answer_callback_query(call.id, "AI tahlil qilmoqda...")
-    
-    # Kutish xabari
-    process_msg = bot.send_message(call.message.chat.id, f"⌛ **{ekin.capitalize()}** haqida ma'lumot tayyorlanmoqda...")
+# --- 🦠 AI КАСАЛЛИК АНИҚЛАШ ---
+@bot.message_handler(func=lambda message: message.text == "🦠 Kasallik aniqlash")
+def kasallik_start(message):
+    kasallik_mode.add(message.chat.id)
+    bot.send_message(message.chat.id, "📸 O'simlik rasmini yuboring.")
 
-    try:
-        # AI ga buyruq
-        prompt = f"O'zbekiston iqlimida {ekin} yetishtirish bo'yicha juda batafsil agronomik tavsiyalar ber. Ekish vaqti, sxemasi, o'g'itlash va sug'orish sirlarini yoz."
-        
-        response = openai_client.chat.completions.create(
-            model="gpt-4o", 
-            messages=[
-                {"role": "system", "content": "Sen professional agronom va dehqonchilik bo'yicha mutaxassisman. Javoblarni o'zbek tilida chiroyli formatda ber."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        
-        answer = response.choices[0].message.content
-        
-        # Orqaga qaytish tugmasi
-        back_markup = InlineKeyboardMarkup()
-        back_markup.add(InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_list"))
-        
-        bot.delete_message(call.message.chat.id, process_msg.message_id)
-        bot.send_message(call.message.chat.id, answer, parse_mode="Markdown", reply_markup=back_markup)
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    if message.chat.id in kasallik_mode:
+        wait_msg = bot.send_message(message.chat.id, "⌛ Tahlil qilinmoqda...")
+        try:
+            file_info = bot.get_file(message.photo[-1].file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            img = {'mime_type': 'image/jpeg', 'data': downloaded_file}
+            response = gemini_model.generate_content(["Rasmдаги o'simlik kasalligini aniqlang va o'zbek tilida tavsiya bering.", img])
+            bot.delete_message(message.chat.id, wait_msg.message_id)
+            bot.send_message(message.chat.id, response.text, parse_mode="Markdown")
+            kasallik_mode.discard(message.chat.id)
+        except:
+            bot.send_message(message.chat.id, "❌ Rasmni tahlil qilib bo'lmadi.")
 
-    except Exception as e:
-        bot.edit_message_text(f"❌ Xatolik yuz berdi: {str(e)}", call.message.chat.id, process_msg.message_id)
+# --- 🌤 ОБ-ҲАВО ---
+@bot.message_handler(func=lambda message: message.text == "🌤 Ob-havo")
+def weather_handler(message):
+    params = {"q": "Tashkent", "appid": WEATHER_API_KEY, "units": "metric", "lang": "uz"}
+    try:
+        res = requests.get(WEATHER_URL, params=params).json()
+        temp = res["main"]["temp"]
+        desc = res["weather"][0]["description"]
+        bot.send_message(message.chat.id, f"🌤 **Tashkent**\n🌡 Harorat: {temp}°C\n☁️ Holat: {desc.capitalize()}", parse_mode="Markdown")
+    except:
+        bot.send_message(message.chat.id, "❌ Ob-havo ma'lumotini olib bo'lmadi.")
 
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_list")
-def back_to_list(call):
-    bot.delete_message(call.message.chat.id, call.message.message_id)
-    ekish_tavsiyalari(call.message) # ===================== MENYU =====================
+# --- БОШҚАЛАР ---
+@bot.message_handler(func=lambda message: True)
+def text_handler(message):
+    if message.text == "📊 Bozor narxlari":
+        bot.send_message(message.chat.id, "📊 O'rtacha narxlar:\n🍅 Pomidor: 12,000\n🥒 Bodring: 8,000\n🥔 Kartoshka: 5,000")
+    elif message.text == "ℹ️ Yordam":
+        bot.send_message(message.chat.id, "Savollar bo'lsa @Hasanboy_Obidjonov га ёзинг.")
 
-
-def asosiy_menyu():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(
-        KeyboardButton("🌤 Ob-havo"),
-        KeyboardButton("🌱 Ekish tavsiyasi"),
-    )
-    markup.add(
-        KeyboardButton("🦠 Kasallik aniqlash"),
-        KeyboardButton("📊 Bozor narxlari"),
-    )
-    markup.add(
-        KeyboardButton("📚 Kitoblar menyusi"),
-        KeyboardButton("ℹ️ Yordam"),
-    )
-    return markup
-
-
-# ===================== OB-HAVO =====================
-
-
-def get_weather(city="Tashkent"):
-    try:
-        params = {
-            "q": city,
-            "appid": WEATHER_API_KEY,
-            "units": "metric",
-            "lang": "uz",
-        }
-        response = requests.get(WEATHER_URL, params=params, timeout=10)
-        data = response.json()
-
-        if response.status_code != 200:
-            return f"❌ Shahar topilmadi: *{city}*\nTo'g'ri shahar nomini kiriting (masalan: Tashkent, Samarkand, Namangan)"
-
-        temp = round(data["main"]["temp"])
-        feels_like = round(data["main"]["feels_like"])
-        humidity = data["main"]["humidity"]
-        wind = round(data["wind"]["speed"])
-        desc = data["weather"][0]["description"].capitalize()
-        city_name = data["name"]
-
-        if temp > 30:
-            tavsiya = "☀️ Juda issiq! Sug'orishni erta tong (05:00-07:00) yoki kechqurun (19:00-21:00) qiling."
-        elif temp > 20:
-            tavsiya = "✅ Sug'orish uchun qulay kun. Tong yoki kechqurun sug'oring."
-        elif temp > 10:
-            tavsiya = "🌿 Ildiz sug'orish tavsiya etiladi. Suv miqdorini kamaytiring."
-        else:
-            tavsiya = "❄️ Sovuq! Sug'orishdan saqlaning, ekinlarni qoplang."
-
-        return (
-            f"🌤 *{city_name} ob-havosi*\n\n"
-            f"🌡 Harorat: *{temp}°C* (his: {feels_like}°C)\n"
-            f"☁️ Holat: {desc}\n"
-            f"💧 Namlik: {humidity}%\n"
-            f"🌬 Shamol: {wind} m/s\n\n"
-            f"🌾 *Dehqon tavsiyasi:*\n{tavsiya}"
-        )
-    except requests.exceptions.Timeout:
-        return "❌ Serverga ulanishda xatolik. Qayta urinib ko'ring."
-    except Exception as e:
-        return f"❌ Xatolik yuz berdi: {str(e)}"
-
-
-# ===================== AI KASALLIK TAHLILI =====================
-
-
-def analyze_plant_image(image_bytes: bytes) -> str:
-    try:
-        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-
-        response = openai_client.chat.completions.create(
-            model="gpt-5",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "Siz qishloq xo'jaligi mutaxassisi sun'iy intellektisiz. "
-                                "Ushbu o'simlik rasmini diqqat bilan tahlil qiling va quyidagilarni aniqlang:\n\n"
-                                "1. O'simlik turi (agar aniqlanса)\n"
-                                "2. Kasallik yoki muammo bormi?\n"
-                                "3. Aniq tashxis (kasallik nomi)\n"
-                                "4. Sababi\n"
-                                "5. Davolash usuli va tavsiyalar\n\n"
-                                "Javobni o'zbek tilida bering. Agar rasm o'simlik bo'lmasa, shuni ayting."
-                            ),
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
-                        },
-                    ],
-                }
-            ],
-            max_completion_tokens=8192,
-        )
-        return response.choices[0].message.content or "Tahlil natijasi olinmadi."
-    except Exception as e:
-        error_msg = str(e)
-        if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
-            return "❌ AI tahlil limiti tugadi. Iltimos, keyinroq urinib ko'ring."
-        return f"❌ AI tahlilida xatolik: {error_msg}"
-
-
-# ===================== EKISH TAVSIYASI =====================
-
-
-def get_ekish_tavsiya():
-    return (
-        "🌱 *Ekish tavsiyasi*\n\n"
-        "📅 Aprel oyi uchun:\n\n"
-        "• 🍅 Pomidor — ko'chatsiz ekiladi\n"
-        "• 🥒 Bodring — ochiq yerga ekiladi\n"
-        "• 🌽 Makkajo'xori — ekishga qulay vaqt\n"
-        "• 🧅 Piyoz — o'tqazish davomi\n\n"
-        "🌡 Tuproq harorati: 18-20°C\n"
-        "✅ Ekish uchun qulay kun!"
-    )
-
-
-# ===================== BOZOR NARXLARI =====================
-
-
-def get_bozor_narxlari():
-    return (
-        "📊 *Bugungi bozor narxlari*\n\n"
-        "🍅 Pomidor — 8 000 so'm/kg\n"
-        "🥒 Bodring — 5 000 so'm/kg\n"
-        "🧅 Piyoz — 3 500 so'm/kg\n"
-        "🥔 Kartoshka — 4 000 so'm/kg\n"
-        "🌽 Makkajo'xori — 6 000 so'm/kg\n"
-        "🍇 Uzum — 15 000 so'm/kg\n\n"
-        "📅 Yangilanish: bugun"
-    )
-
-
-# ===================== KASALLIK =====================
-
-
-def get_kasallik():
-    return (
-        "🦠 *Kasallik aniqlash*\n\n"
-        "O'simligingizning rasmini yuboring — sun'iy intellekt darhol tahlil qilib, "
-        "kasallik yoki muammoni aniqlab beradi.\n\n"
-        "📸 *Rasmni hoziroq yuboring!*\n\n"
-        "📞 Mutaxassis bilan bog'lanish: @Hasanboy\_Obidjonov"
-    )
-
-
-# ===================== KITOBLAR =====================
-
-ALL_BOOKS = [
-    ('Suv xo\'jaligini boshqarish', 'https://agrobank.uz/upload/iblock/04b/mmqrqriicrayrpoc82e7s4ok5y88ovmj/1-Suv%20xo%E2%80%98jaligini%20boshqarish.pdf'),
-    ('Suvdan foydalanish tartibi', 'https://agrobank.uz/upload/iblock/da1/4u4u0t5hmprlo5gt2pzqkisek92ipjy6/2-Suvdan%20foydalanish%20tartibi.pdf'),
-    ('Gidromodul rayonlari va sug\'orish rejimlari', 'https://agrobank.uz/upload/iblock/196/hs7ns0jg9cys7spggan5ecvwq5ncbdpe/3-Gidromodul%20rayonlari%20va%20sug%E2%80%98orish%20rejimlari.pdf'),
-    ('Sug\'orishda tuproq xususiyati', 'https://agrobank.uz/upload/iblock/a05/bnhs54tisvwivjg2948by0yf8yv92ihm/4-%20Sug%E2%80%98orishda%20tuproq%20xususiyati.pdf'),
-    ('Suv tejashni qo\'llab-quvvatlash', 'https://agrobank.uz/upload/iblock/9da/djfi9e2rymcphmiaxacjn7pbkcryuh9j/5-%20Suv%20tejashni%20qo%E2%80%98llab-quvvatlash.pdf'),
-    ('Sug\'orish usullari', 'https://agrobank.uz/upload/iblock/7e2/nlyy0l8db02rggaowyevip86z9bm4lkv/6-%20Sug%E2%80%98orish%20usullari.pdf'),
-    ('G\'o\'zani tomchilatib sug\'orish', 'https://agrobank.uz/upload/iblock/afc/lylyep3jxf862zj5uxmhhv7nuroyxdti/7-G%E2%80%98o%E2%80%98zani%20tomchilatib%20sug%E2%80%98orish.pdf'),
-    ('G\'o\'zani yomg\'irlatib sug\'orish', 'https://agrobank.uz/upload/iblock/d0f/73cbco0k8f420kwpwgtgy34zasoi662f/8-%20G%E2%80%98o%E2%80%98zani%20yomg%E2%80%98irlatib%20sug%E2%80%98orish.pdf'),
-    ('G\'o\'zani diskret sug\'orish', 'https://agrobank.uz/upload/iblock/73d/uicydcxt7tp8alxf72rtjywcusqvs369/9-%20G%E2%80%98o%E2%80%98zani%20diskret%20sug%E2%80%98orish.pdf'),
-    ('Bug\'doyni yomg\'irlatib sug\'orish', 'https://agrobank.uz/upload/iblock/e22/zw3x836c15yl95a042md39y9t5rckjsu/10-%20Bug%E2%80%98doyni%20yomg%E2%80%98irlatib%20sug%E2%80%98orish.pdf'),
-    ('Donli ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/3e5/c4bwhnji6q4nzeqr7n6pv0rfulgp5gyn/11-Donli%20ekinlarni%20sug%E2%80%98orish.pdf'),
-    ('Kartoshkani sug\'orish', 'https://agrobank.uz/upload/iblock/3a3/o695zhjt8o0nt9sashwsig8iueii543u/12-Kartoshkani%20sug%E2%80%98orish.pdf'),
-    ('Sholini sug\'orish', 'https://agrobank.uz/upload/iblock/198/8kqx01tql3p7j4ppxe2zuweqielujvds/13-Sholini%20sug%E2%80%98orish.pdf'),
-    ('Piyozni sug\'orish', 'https://agrobank.uz/upload/iblock/937/hfcqikq2laisgd7rc59t9m7k32j3g74y/14-Piyozni%20sug%E2%80%98orish.pdf'),
-    ('Sabzavot ekinlarini sug\'orish', 'https://agrobank.uz/upload/iblock/1d5/39swrjrdfths3i29r5dvrc25kbm6b75u/15-Sabzavot%20ekinlarini%20sug%E2%80%98orish.pdf'),
-    ('Issiqxonada sabzavot ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/a9a/5of87zsrcor4igug9djh72nv33miv11a/16-Issiqxonada%20sabzavot%20ekinlarni%20sug%E2%80%98orish.pdf'),
-    ('Dukkakli don ekinlarini sug\'orish', 'https://agrobank.uz/upload/iblock/96b/eh5sq8x78oelcyhqy43k2l9ln0g770vc/17-Dukkakli%20don%20ekinlarini%20sug%E2%80%98orish.pdf'),
-    ('Poliz ekinlarini sug\'orish', 'https://agrobank.uz/upload/iblock/42a/e1bqjk85z149vid8ldhft0r3o3je7nbg/18-Poliz%20ekinlarini%20sug%E2%80%98orish.pdf'),
-    ('Uzum va mevali ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/c49/ushdd78fnj6m32c8q9p4rc54n0bt3wtk/19-Uzum%20va%20mevali%20ekinlarni%20sug%E2%80%98orish.pdf'),
-    ('Ozuqabop ekinlarni sug\'orish', 'https://agrobank.uz/upload/iblock/f98/uhw3kbewz564syaiistir3tp2pjm1sd8/20-Ozuqabop%20ekinlarni%20sug%E2%80%98orish.pdf'),
-    ('Lalmi yerlarda yomg\'ir suvidan foydalanish', 'https://agrobank.uz/upload/iblock/900/y14ckllzs10u7xmws5og1kazpez66cb8/21-Lalmi%20yerlarda%20yomg%E2%80%98ir%20suvidan%20foydalanish.pdf'),
-    ('Tuproqda nam saqlovchi vositalar', 'https://agrobank.uz/upload/iblock/5f0/4uin56wynmk8clbwi1rbbmoe421ld59a/22-Tuproqda%20nam%20saqlovchi%20vositalar.pdf'),
-    ('Yerlarni tekislash', 'https://agrobank.uz/upload/iblock/63a/mrsqbxmgjrvjtefrv6f3d203p075h6g3/23-Yerlarni%20tekislash.pdf'),
-    ('Sug\'orishda nasoslardan foydalanish', 'https://agrobank.uz/upload/iblock/31c/qbm669hf6orfcyfdg18nmr3jh3hf3h92/24-Sug%E2%80%98orishda%20nasoslardan%20foydalanish.pdf'),
-    ('Sug\'orishda muqobil energiya manbalari', 'https://agrobank.uz/upload/iblock/f85/ei9udp9sv6l8asu8nhtqsq0hzi7331ph/25-Sug%E2%80%98orishda%20muqobil%20energiya%20manbalari.pdf'),
-    ('Yerlarning meliorativ holatini yaxshilash', 'https://agrobank.uz/upload/iblock/8a7/f8hwwi86n58kfyibwfduufmi696do27u/26-Yerlarning%20meliorativ%20holatini%20yaxshilash.pdf'),
-    ('Sug\'orish texnologiyasini loyihalash va qurish', 'https://agrobank.uz/upload/iblock/bc1/7p75m5cu26d603e0w36xbyd2ubcgqd8a/27-Sug%E2%80%98orish%20texnologiyasini%20loyihalash%20va%20qurish.pdf'),
-    ('Sug\'orishda agrometrologik stansiyalardan foydalanish', 'https://agrobank.uz/upload/iblock/8b5/cfwvany811gl2iocfas35wc1grc3dsdw/28-Sug%E2%80%98orishda%20agrometrologik%20stansiyalardan%20foydalanish.pdf'),
-    ('Turkiyada sug\'orish tajribasi', 'https://agrobank.uz/upload/iblock/a01/u3ac0ozah06yaimysh7ht8mar4vdz9xt/29-Turkiyada%20sug%E2%80%98orish%20tajribasi.pdf'),
-    ('Xitoyda sug\'orish tajribasi', 'https://agrobank.uz/upload/iblock/573/vxdcqx8q4csepyje7uip0r5x4j5yednc/30-Xitoyda%20sug%E2%80%98orish%20tajribasi.pdf'),
-    ('Kitob 31', 'https://agrobank.uz/upload/iblock/037/4bkwu0ywfh40a4bj0ocbwemu089yquvz/6088ea419eb33.pdf'),
-    ('Kitob 32', 'https://agrobank.uz/upload/iblock/540/o8q28v577ruiyuotu588010fdw0ne60e/6088e74c003ce.pdf'),
-    ('Kitob 33', 'https://agrobank.uz/upload/iblock/f34/bz6t06vw4ii3lzxhpee1ovo0z73vbulq/6088e795a17b9.pdf'),
-    ('Kitob 34', 'https://agrobank.uz/upload/iblock/460/wii1lz7ckd3i19axgv9l4ocjmcxps2ws/6088e802be5b3.pdf'),
-    ('Kitob 35', 'https://agrobank.uz/upload/iblock/7a5/h06ynpkmi4irrexkr2t3rh2a0im45deq/6088e8459b888.pdf'),
-    ('Kitob 36', 'https://agrobank.uz/upload/iblock/966/ani02ebmt93xaccjgruceqvij5gmbaf9/6088e865bbbc5.pdf'),
-    ('Kitob 37', 'https://agrobank.uz/upload/iblock/768/3h8largd7xohk58o8cy4w6et19ezmhz2/6088e8afea83d.pdf'),
-    ('Kitob 38', 'https://agrobank.uz/upload/iblock/e55/bqwujm4ldmtleljco2vgh27rptuifsib/6088e96002d01.pdf'),
-    ('Kitob 39', 'https://agrobank.uz/upload/iblock/80b/tksjmj7gtomfuv6xbqvq9hzchumlr7y9/6088e999ebf3f.pdf'),
-    ('Kitob 40', 'https://agrobank.uz/upload/iblock/245/pm42j6g2q6bsptqup27hxb90z8jjja91/6088e9ddb9829.pdf'),
-    ('Kitob 41', 'https://agrobank.uz/upload/iblock/979/g8aeyxi21h0taobm4caphhwoehp7aqyt/6088ea18e0dad.pdf'),
-    ('Kitob 42', 'https://agrobank.uz/upload/iblock/a26/3jts1hgandv9djerz7p5vsaepvv4020x/6088ec94ce924.pdf'),
-    ('Kitob 43', 'https://agrobank.uz/upload/iblock/b55/1rtqz70nfdqpn3w66f5x03uj5289l0d0/6088ea6b4425b.pdf'),
-    ('Kitob 44', 'https://agrobank.uz/upload/iblock/23d/2vnbr6e07eeaxnqqoji48fui3nglbvdb/6088ea990d96a.pdf'),
-    ('Kitob 45', 'https://agrobank.uz/upload/iblock/407/dxi7ak3urospzob60dk14iuk2yuyklek/6088eab7eebdd.pdf'),
-    ('Kitob 46', 'https://agrobank.uz/upload/iblock/03d/9jdnz00g9con14cjjama1l46ddg7aiui/6088eadebe04f.pdf'),
-    ('Kitob 47', 'https://agrobank.uz/upload/iblock/c8b/xtnu6pfw1ubwnm4khxszoukt8tnkjn1u/6088eb1c68b89.pdf'),
-    ('Kitob 48', 'https://agrobank.uz/upload/iblock/c3a/13bg1pc036bty2zsdvj0xpvdnhma0935/6088eb41780c5.pdf'),
-    ('Kitob 49', 'https://agrobank.uz/upload/iblock/003/v96bv8bmpc7fvc7ebpmczog93n1jz0fe/6088eb88f3a2b.pdf'),
-    ('Kitob 50', 'https://agrobank.uz/upload/iblock/662/kwx9r2g5ilcktnopu9hpr1r4sv29qu7m/6088ebe9e32e2.pdf'),
-    ('Kitob 51', 'https://agrobank.uz/upload/iblock/469/0uaf1djcbojqvw834pfk80flizhf0tf7/6088ed7431e1f.pdf'),
-    ('Kitob 52', 'https://agrobank.uz/upload/iblock/599/4vg8l779dgrrv2p7ondr7dupntcudhwi/6088eceb718b1.pdf'),
-    ('Kitob 53', 'https://agrobank.uz/upload/iblock/1e9/bpzld3xn05ytdc89zf7bldy2djxrlxt9/6088f45a7ccf8.pdf'),
-    ('Kitob 54', 'https://agrobank.uz/upload/iblock/0b3/3zokwzwou0gs5fr59ivtgh6e3fx7gp5y/6088f3fd08b53.pdf'),
-    ('Kitob 55', 'https://agrobank.uz/upload/iblock/4a8/3qgj9p96iiup8q96jm2pfd6i2hezmdet/6088f3c71e224.pdf'),
-    ('Kitob 56', 'https://agrobank.uz/upload/iblock/bdc/3xgc4n5jznn3qax6a8f2lfmjlecktv9e/6088f35be5a7e.pdf'),
-    ('Kitob 57', 'https://agrobank.uz/upload/iblock/23b/syjwbbyp194yao1eodajity3rd7e9jow/6088f31227493.pdf'),
-    ('Kitob 58', 'https://agrobank.uz/upload/iblock/2e8/tnn4b83zxsl2xdyxzw09uc0q9pafprqm/6088f2cb93bd4.pdf'),
-    ('Kitob 59', 'https://agrobank.uz/upload/iblock/7cb/dqov3twa4u0ii4xey7mzy3mpu5btx62y/6088f251556d5.pdf'),
-    ('Kitob 60', 'https://agrobank.uz/upload/iblock/7d5/j5p7d796r7lvq9jyg93tmzov4h9hs0su/6088f222711f2.pdf'),
-    ('Kitob 61', 'https://agrobank.uz/upload/iblock/f9d/7likjymogp29ab5w5tt27ahjminfxs30/6088f1eac557b.pdf'),
-    ('Kitob 62', 'https://agrobank.uz/upload/iblock/835/pqte9dfrvnmxakd8n65fxye39ajq182y/6088f1b9c9365.pdf'),
-    ('Kitob 63', 'https://agrobank.uz/upload/iblock/7e6/ym45kexdyx2zc868ff8l1lbt171jidjr/6088f187d4015.pdf'),
-    ('Kitob 64', 'https://agrobank.uz/upload/iblock/1d7/u7txj37pxackiorkzt4ap50fgu9yofuk/6088f136cac33.pdf'),
-    ('Kitob 65', 'https://agrobank.uz/upload/iblock/b98/4og7mk9gscm4qw5lql8ee7rn92297h67/6088f0c2a045a.pdf'),
-    ('Kitob 66', 'https://agrobank.uz/upload/iblock/d40/nd3kt6t4h89mk5y1t2h9k7nvffod0w2v/6088f04883762.pdf'),
-    ('Kitob 67', 'https://agrobank.uz/upload/iblock/ea5/i44y8wxkivmpa7bamq9nbz2h00rtj3yr/6088ef95ad34d.pdf'),
-    ('Kitob 68', 'https://agrobank.uz/upload/iblock/157/f5iaa786bc2lfxdcjw7k9xgu23orf9dh/6088f28495a27.pdf'),
-    ('Kitob 69', 'https://agrobank.uz/upload/iblock/0ba/zxr1ltgo977uudfz9is1wzb4xask5cnr/6088f20a0a578.pdf'),
-    ('Kitob 70', 'https://agrobank.uz/upload/iblock/152/6xfq433s5hsbo17vomrvsl5tlq46xf9u/6088f1b344f32.pdf'),
-    ('Kitob 71', 'https://agrobank.uz/upload/iblock/a5e/i496d49n0384ov1z9mq4k7kva6t555ad/6088f170a7a0a.pdf'),
-    ('Kitob 72', 'https://agrobank.uz/upload/iblock/c2d/g59c1i5mw9bv9l83z8gxk5nzfxin6xtl/6088f136e45ad.pdf'),
-    ('Kitob 73', 'https://agrobank.uz/upload/iblock/aaa/s8dkcrfuo40t35dvnr45b3b1uqkbhj7n/6088f10e2cff9.pdf'),
-    ('Kitob 74', 'https://agrobank.uz/upload/iblock/f5e/iuggb3f6k1cvkj08d46ko3d7y6u4hpkr/6088f0e5c76cc.pdf'),
-    ('Kitob 75', 'https://agrobank.uz/upload/iblock/9e0/uslz6c9qmvv0tffkj9wvkmtl7wnzv5m2/6088f069d3b68.pdf'),
-    ('Kitob 76', 'https://agrobank.uz/upload/iblock/24d/cvuao6tqw75eofu7e3n1wwbkf5hkjvum/6088efdd0e56e.pdf'),
-    ('Kitob 77', 'https://agrobank.uz/upload/iblock/d13/bsf7iiylx3h18h7pf6ekdtdlkb9kl9f2/6088ef9f2d5e2.pdf'),
-    ('Kitob 78', 'https://agrobank.uz/upload/iblock/6d4/nctctjgxqwhf4cdz66hmkpmw3hii5nlf/6088ef5b18bc8.pdf'),
-    ('Kitob 79', 'https://agrobank.uz/upload/iblock/b79/l7nh4kj8hre9dqxoo7cmih6xowh0e62i/6088ef1f62f01.pdf'),
-    ('Kitob 80', 'https://agrobank.uz/upload/iblock/543/sbsz3m7p1oomimhvqwnbgbwxixhjcw4e/6088eed8e3ef6.pdf'),
-    ('Kitob 81', 'https://agrobank.uz/upload/iblock/cd7/l21gihk0z9pmydlqmk07csdkn11gajrp/6088eea29bb67.pdf'),
-    ('Kitob 82', 'https://agrobank.uz/upload/iblock/d99/kk4thwz7yjhagd5lm31rn8hx3j09dmyw/6088ee6c50e09.pdf'),
-    ('Kitob 83', 'https://agrobank.uz/upload/iblock/54f/p4kpafv5v4i4j8w9sxhtyiiy0wqnv06e/6088ee1d4c6f6.pdf'),
-    ('Kitob 84', 'https://agrobank.uz/upload/iblock/bd3/0xj7drxk0pz35cbh0r1fq9rog0w2w5iy/6088edd9b13e0.pdf'),
-    ('Kitob 85', 'https://agrobank.uz/upload/iblock/69a/22s43vq6yrjw8chxs4qbchke7ajnpzd3/6088ed9a2b8f3.pdf'),
-    ('Kitob 86', 'https://agrobank.uz/upload/iblock/3fb/vgmv7qhrjxwrlvf27smjjq46ufwnidrs/6088ec5f22dcc.pdf'),
-    ('Kitob 87', 'https://agrobank.uz/upload/iblock/e16/bpam6bkrn4yxsrxn3w7l8dhm9adx5lvt/6088ebf6e2d91.pdf'),
-    ('Kitob 88', 'https://agrobank.uz/upload/iblock/b0b/5c1rhvs3wxqazqjq5bxbkegk3qntwz89/6088f465a74b0.pdf'),
-    ('Kitob 89', 'https://agrobank.uz/upload/iblock/f38/g60eza0fcpjkk7d7xk4kmpyj1mwww5lq/6088f440ced8e.pdf'),
-    ('Kitob 90', 'https://agrobank.uz/upload/iblock/b6d/epkf8xc8mk7m9snhxxppbblywbkd8zzb/6088f41ab2cc8.pdf'),
-    ('Kitob 91', 'https://agrobank.uz/upload/iblock/0d6/iyqjkf0z72g0rqlrqkagalx7ejj7r35h/6088f3d8499f6.pdf'),
-    ('Kitob 92', 'https://agrobank.uz/upload/iblock/8b6/01v8zqrqajm7w7f0x23thzytbv5ixj6j/6088f37e4a0f4.pdf'),
-    ('Kitob 93', 'https://agrobank.uz/upload/iblock/a7a/4c9phvmqe6jz19tvz7j6dfm1r7rfu1c4/6088fad2697a1.pdf'),
-    ('Kitob 94', 'https://agrobank.uz/upload/iblock/2c4/5scklfz2xhbinbvg7x6zbbgv6t8wq6g1/6088fa97f3de4.pdf'),
-    ('Kitob 95', 'https://agrobank.uz/upload/iblock/91a/ksvbih4bafp65lhfqf0rxdm35czmq6iy/6088fa5ec7e1d.pdf'),
-    ('Kitob 96', 'https://agrobank.uz/upload/iblock/74f/5t7pjlgvakb9lp4djsixikevtq37zfla/6088fa286e1a2.pdf'),
-    ('Kitob 97', 'https://agrobank.uz/upload/iblock/04b/v5jyf1z2ygih3w4poh3hwf3b6f34bxts/6088f9f232770.pdf'),
-    ('Kitob 98', 'https://agrobank.uz/upload/iblock/8b1/7z8e1cq0jrb7f3d8l85r0nv8vmnuze9i/6088f9c31c22f.pdf'),
-    ('Kitob 99', 'https://agrobank.uz/upload/iblock/36d/vbumx71vfv0jc71y3oeqs4wz5bq5b7vz/6088f994a3df8.pdf'),
-    ('Kitob 100', 'https://agrobank.uz/upload/iblock/35f/pyvaqpiyrcgkr8glzflnr5cbq2rcemrz/6088f95a8ad89.pdf'),
-    ('Kitob 101', 'https://agrobank.uz/upload/iblock/2f8/t3aaihv5r7a0vgqevz2mbf2e6oc3h36b/6088f926898a9.pdf'),
-    ('Kitob 102', 'https://agrobank.uz/upload/iblock/22b/qp1vlw9jbgolsjmvptgsnkxlf9z2evhe/6088f8f0ac6bc.pdf'),
-    ('Kitob 103', 'https://agrobank.uz/upload/iblock/8ec/z5g28i6ij1m0iawrbhiuobi72vwz7k7e/6088f8be5d8fc.pdf'),
-    ('Kitob 104', 'https://agrobank.uz/upload/iblock/b8f/hq0r1xue8xi0btx5k0v5jg2x68hktq0n/6088f88637f71.pdf'),
-    ('Kitob 105', 'https://agrobank.uz/upload/iblock/b12/m8grfrv5wdmimx2fldwjpgfacjcswbp9/6088f83f5fc72.pdf'),
-    ('Kitob 106', 'https://agrobank.uz/upload/iblock/e84/p3uo7qlg57p1bqd0i8o0tq2y2x4r52cq/6088f80da2f5c.pdf'),
-    ('Kitob 107', 'https://agrobank.uz/upload/iblock/d87/ctcre3f1fflbwq5jfamdbvmgdddaxvif/6088f7d69c7a3.pdf'),
-    ('Kitob 108', 'https://agrobank.uz/upload/iblock/aad/p7e3fzs3v86s9fjhkxp10j10wgq3pjme/6088f79dc07b5.pdf'),
-    ('Kitob 109', 'https://agrobank.uz/upload/iblock/88a/9l4cclmkcz0bq44ber27wjxs5b3yh0q3/6088f763a15e9.pdf'),
-    ('Kitob 110', 'https://agrobank.uz/upload/iblock/f91/xbcauzr2kwn0yipqg3l3k44m7pbp5c9p/6088f72ead20c.pdf'),
-    ('Kitob 111', 'https://agrobank.uz/upload/iblock/e05/wjq8bkkd1w42mzmxuswyvuqrsp0e9irn/6088f6f3bb4c6.pdf'),
-    ('Kitob 112', 'https://agrobank.uz/upload/iblock/e97/6f74ywrspxoq5dywt7oo9l8p2cvyj70b/6088f6b7d8a05.pdf'),
-    ('Kitob 113', 'https://agrobank.uz/upload/iblock/abb/4r5wz6uu5mvlz2fhgp3t98oj2l3dkfrr/6088f67e4c7d3.pdf'),
-    ('Kitob 114', 'https://agrobank.uz/upload/iblock/af4/0mxx49l9t05qhxkq4e0t15rg80a7dnj6/6088f645cff39.pdf'),
-    ('Kitob 115', 'https://agrobank.uz/upload/iblock/1cd/jq1hhgb7h0b93jbsz5ghtm5gk5k1fjhe/6088f60c1daf8.pdf'),
-    ('Kitob 116', 'https://agrobank.uz/upload/iblock/3fa/bldrqspddghg02g2mvwwm84nvvqv3yd9/6088f5d527b47.pdf'),
-    ('Kitob 117', 'https://agrobank.uz/upload/iblock/e42/vr6v8ykbvvjbskhzwynvnafvbfv3etlx/6088f59dc49ef.pdf'),
-    ('Kitob 118', 'https://agrobank.uz/upload/iblock/7d9/bcbm1xxiqme8bxdbclca5x4i7i5sclpd/6088f56627b6e.pdf'),
-    ('Kitob 119', 'https://agrobank.uz/upload/iblock/f6a/2wvk0xpbw0p1ry1h7c3z3a8y5vw8k7zn/6088f52c3a2ef.pdf'),
-    ('Kitob 120', 'https://agrobank.uz/upload/iblock/6dd/g4w72f2e4yiprnnuiyxpexs1dymqm8q4/6088f4f4d2b8b.pdf'),
-    ('Kitob 121', 'https://agrobank.uz/upload/iblock/26a/9r3mrkv3sxlb5c56f94rqmb9oa0f7i19/6088f4be2a20e.pdf'),
-    ('Kitob 122', 'https://agrobank.uz/upload/iblock/ab4/3b84b3r8ysjlv3h4dg0ky1mlqyg6hm8z/6088f48add0ba.pdf'),
-    ('Kitob 123', 'https://agrobank.uz/upload/iblock/2b4/jq9cddbhj0z9w500k4jv7i1xggo7evc2/6088fd9eaf716.pdf'),
-    ('Kitob 124', 'https://agrobank.uz/upload/iblock/d9e/1a32o2xauyqvu2gyt88oczvhh0y5pvq7/6088fd522e552.pdf'),
-    ('Kitob 125', 'https://agrobank.uz/upload/iblock/1e2/go7xe7ls81ekm145kv2r11kylcg1x7ih/6088fd2750e3c.pdf'),
-    ('Kitob 126', 'https://agrobank.uz/upload/iblock/a06/rtou1ae8w0yir7j6ta4dvrh1dx70fkmi/6088fcff52942.pdf'),
-    ('Kitob 127', 'https://agrobank.uz/upload/iblock/5d8/br6l6z6n53zxbp1ov1nbrh5mjykrpjqw/6088fcb98527f.pdf'),
-    ('Kitob 128', 'https://agrobank.uz/upload/iblock/66a/s9plf258w1zkug4tpusy6x9yqcs65i1f/6088fc6ec2b1d.pdf'),
-    ('Kitob 129', 'https://agrobank.uz/upload/iblock/137/gwp0jyrwq0dgd18chjflkffu2byl89et/6273829c11347.pdf'),
-    ('Kitob 130', 'https://agrobank.uz/upload/iblock/571/thpcguf4bw27vxm3oezdbhpchnc1pgss/6273837dac84f.pdf'),
-    ('Kitob 131', 'https://agrobank.uz/upload/iblock/d3c/2iz9jtn3wfynojzfnp5rfgcof20f6453/6273a2c4e8152.pdf'),
-    ('Kitob 132', 'https://agrobank.uz/upload/iblock/24b/ofbaxbcuj57e1qhi50lkktujpw1hyw34/6273a302eb07b.pdf'),
-    ('Kitob 133', 'https://agrobank.uz/upload/iblock/6be/94u3egnxv7lp6u3gx85gpjn5aks6vj9w/6273a32d9d7a9.pdf'),
-    ('Kitob 134', 'https://agrobank.uz/upload/iblock/2a9/hjpqpx051eqauuuhcnjgq0ju3df5ez37/6273a3b331bb4.pdf'),
-    ('Kitob 135', 'https://agrobank.uz/upload/iblock/e3a/lwq7djjfmfw5byjexju2ua8ypyi2u3dw/6273a3f9ce096.pdf'),
-    ('Kitob 136', 'https://agrobank.uz/upload/iblock/e36/iha67ec2ptz9px3ut04m352ux4u7rrs8/6273a4718083d.pdf'),
-    ('Kitob 137', 'https://agrobank.uz/upload/iblock/569/rwa8r5e2ky14539thijkl0rkajv3wvoo/6273a4bd8fd38.pdf'),
-    ('Kitob 138', 'https://agrobank.uz/upload/iblock/467/hcxlenhuexs6jt5icq7tz8p97c43zxxb/6273a524b1909.pdf'),
-    ('Kitob 139', 'https://agrobank.uz/upload/iblock/d0a/0q6s3n2r0khsbt2rlrdwwux1rizlgqjt/6273a6ad7aa77.pdf'),
-    ('Kitob 140', 'https://agrobank.uz/upload/iblock/0b6/0wv8fe2vy66bjd9532qzhb225ff6fojs/6273a789e54d2.pdf'),
-    ('Kitob 141', 'https://agrobank.uz/upload/iblock/480/5zd2l90y7cok68g0nw15h0z1fkp0xzcj/6273a7b566d92.pdf'),
-    ('Kitob 142', 'https://agrobank.uz/upload/iblock/8d4/1zmaveusab67iidw1e36djauen96xarw/6273a7fdf375b.pdf'),
-    ('Kitob 143', 'https://agrobank.uz/upload/iblock/456/belqaoetan1u3b0k7hn9hdwps5tt8jlo/6273bc2165f96.pdf'),
-    ('Kitob 144', 'https://agrobank.uz/upload/iblock/e49/twqyuiiw0meqjx6zu699tx79q2i9lofr/6273ba4ec7536.pdf'),
-    ('Kitob 145', 'https://agrobank.uz/upload/iblock/b7e/0mzb5pssjpw11brlmaih65st0xul5j7u/6273bb23d5f9d.pdf'),
-    ('Kitob 146', 'https://agrobank.uz/upload/iblock/54b/k4s7zoc1poo88byg3jut77jzbca655iv/6273bc677ddb8.pdf'),
-    ('Kitob 147', 'https://agrobank.uz/upload/iblock/6a9/0n00glm5tvc8qfrtwd88gvz12mdm1hbk/6273bd2b0f644.pdf'),
-    ('Kitob 148', 'https://agrobank.uz/upload/iblock/124/mzp3ng3j5v3d93jf30838t2r7g2k6k4l/6273be14571ac.pdf'),
-    ('Kitob 149', 'https://agrobank.uz/upload/iblock/9e9/c8iux55yw31e8li03n422bv9guekeujd/6273be8882810.pdf'),
-    ('Kitob 150', 'https://agrobank.uz/upload/iblock/bf7/e1wk0qtue6gr6a2w19zz3t622pw2qwsh/6273bed518d7b.pdf'),
-    ('Kitob 151', 'https://agrobank.uz/upload/iblock/0d8/84gxgufcplind8rnbuikmttoldqwr3ca/6273bef681f3f%20(1).pdf'),
-    ('Kitob 152', 'https://agrobank.uz/upload/iblock/7ec/n71xdvam4agweg3uvl98llzk4okx3437/6273bff0d1044.pdf'),
-    ('Kitob 153', 'https://agrobank.uz/upload/iblock/8c7/u71ueitklkyhcoawseku8fgip1ldm8a5/6273c022e7f83.pdf'),
-    ('Kitob 154', 'https://agrobank.uz/upload/iblock/ea7/sr1gq2yj383xo5j72cehf6td08bowivs/6273c0558b8d0.pdf'),
-    ('Kitob 155', 'https://agrobank.uz/upload/iblock/dbd/cgahs7cxdpjdt629srq6nvssw14yxu0a/6273c07bd722f.pdf'),
-    ('Kitob 156', 'https://agrobank.uz/upload/iblock/d0d/eh80kkabpz56z8bszaudfbnuzyb48a1m/6273c09f73420.pdf'),
-    ('Kitob 157', 'https://agrobank.uz/upload/iblock/86b/9apzl1xck61zp7eu13cv7n2e6mwnpf2f/6273c0fd63d9b.pdf'),
-    ('Kitob 158', 'https://agrobank.uz/upload/iblock/872/1w2qkqoxstukadh24n813ryp3fe16m3s/6273c165c2b6c.pdf'),
-    ('Kitob 159', 'https://agrobank.uz/upload/iblock/d42/cmyst2qwooigq53r36maqfi9v931rj5x/6273c3c06fcca.pdf'),
-    ('Kitob 160', 'https://agrobank.uz/upload/iblock/cc5/mn95j44yz53bsowo3mmausdgwypmu19u/6273c3e9647c0.pdf'),
-    ('Kitob 161', 'https://agrobank.uz/upload/iblock/4e5/z5299q7w15321zxr9t2irdq1bj5jemrt/6273c432a66c8.pdf'),
-    ('Kitob 162', 'https://agrobank.uz/upload/iblock/7ce/97gu41b8g4v2dwchlf69t5lrp7up5lop/6273c45e3a050.pdf'),
-    ('Kitob 163', 'https://agrobank.uz/upload/iblock/04f/2pqcg25bc3f34cikw982c732lhc8q5d2/6273c49f44942.pdf'),
-]
-
-KITOB_PER_PAGE = 8
-KITOB_TOTAL = len(ALL_BOOKS)
-KITOB_PAGES = math.ceil(KITOB_TOTAL / KITOB_PER_PAGE)
-
-
-def make_kitob_text(page):
-    start = page * KITOB_PER_PAGE
-    end = min(start + KITOB_PER_PAGE, KITOB_TOTAL)
-    header = f"\U0001f4da Kitoblar {start + 1}\u2013{end} / {KITOB_TOTAL}"
-    rows = [header, ""]
-    for i, (name, url) in enumerate(ALL_BOOKS[start:end], start + 1):
-        rows.append(f"{i}. {name}")
-        rows.append(url)
-        rows.append("")
-    return "\n".join(rows).strip()
-
-
-def make_kitob_markup(page):
-    markup = InlineKeyboardMarkup()
-    win_start = max(0, page - 3)
-    win_end = min(KITOB_PAGES, win_start + 8)
-    win_start = max(0, win_end - 8)
-    page_btns = []
-    for p in range(win_start, win_end):
-        label = f"[{p + 1}]" if p == page else str(p + 1)
-        page_btns.append(InlineKeyboardButton(label, callback_data=f"kp_{p}"))
-    for i in range(0, len(page_btns), 4):
-        markup.add(*page_btns[i:i + 4])
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton("\u25c0\ufe0f", callback_data=f"kp_{page - 1}"))
-    nav.append(InlineKeyboardButton("\u274c", callback_data="kp_close"))
-    if page < KITOB_PAGES - 1:
-        nav.append(InlineKeyboardButton("\u25b6\ufe0f", callback_data=f"kp_{page + 1}"))
-    markup.add(*nav)
-    return markup
-
-
-# ===================== HANDLERLAR =====================
-
-
-@bot.message_handler(commands=["start"])
-def handle_start(message):
-    name = message.from_user.first_name or "Foydalanuvchi"
-    kasallik_mode.discard(message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        f"Salom, *{name}*! 👋\n\n"
-        f"Men *SmartDehqon* — qishloq xo'jaligi yordamchi botiman.\n\n"
-        f"Quyidagi
+if __name__ == "__main__":
+    bot.polling(none_stop=True)
