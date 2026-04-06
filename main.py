@@ -31,7 +31,43 @@ user_cities = {}
 kasallik_mode = set()
 
 
-# ===================== MENYU =====================
+# --- MAJBURIY OBUNA QISMI ---
+CHANNELS = ["@smart_dehqon_channel"]
+CHANNEL_URL = "https://t.me/smart_dehqon_channel"
+
+def check_sub(user_id):
+    for channel in CHANNELS:
+        try:
+            status = bot.get_chat_member(chat_id=channel, user_id=user_id).status
+            if status in ['member', 'administrator', 'creator']:
+                return True
+        except Exception:
+            return False
+    return False
+
+@bot.message_handler(commands=['start'])
+def start_check(message):
+    user_id = message.chat.id
+    if check_sub(user_id):
+        bot.send_message(user_id, f"Assalomu alaykum, {message.from_user.full_name}!", reply_markup=asosiy_menyu())
+    else:
+        markup = InlineKeyboardMarkup()
+        btn = InlineKeyboardButton("Kanalga a'zo bo'lish 📢", url=CHANNEL_URL)
+        check_btn = InlineKeyboardButton("A'zo bo'ldim ✅", callback_data="check_sub")
+        markup.add(btn)
+        markup.add(check_btn)
+        bot.send_message(user_id, "Botdan foydalanish uchun kanalimizga a'zo bo'ling:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "check_sub")
+def check_callback(call):
+    user_id = call.from_user.id
+    if check_sub(user_id):
+        bot.answer_callback_query(call.id, "Rahmat! A'zolik tasdiqlandi.")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.send_message(call.message.chat.id, "Xush kelibsiz! Botdan foydalanishingiz mumkin.", reply_markup=asosiy_menyu())
+    else:
+        bot.answer_callback_query(call.id, "Siz hali kanalga a'zo bo'lmadingiz! ❌", show_alert=True)
+# --- MAJBURIY OBUNA TUGADI --- # ===================== MENYU =====================
 
 
 def asosiy_menyu():
